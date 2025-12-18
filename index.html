@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>文本去重工具</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-size: 16px;
+            --accent: #2d7ff9;
+            --accent-dark: #1f5fc1;
+            --border: rgba(0, 0, 0, 0.15);
+            --bg: #f4f6fb;
+        }
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            background: var(--bg);
+            color: #222;
+        }
+        .page {
+            max-width: 980px;
+            margin: 0 auto;
+            padding: 2.5rem 1rem 3rem;
+        }
+        h1 {
+            margin-top: 0;
+            font-size: 2rem;
+            color: var(--accent-dark);
+        }
+        p.lead {
+            margin-bottom: 2rem;
+            color: #444;
+        }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(15, 35, 95, 0.08);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border);
+        }
+        textarea {
+            width: 100%;
+            min-height: 200px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            padding: 0.9rem;
+            resize: vertical;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            font-family: Consolas, "SFMono-Regular", "Courier New", monospace;
+        }
+        textarea:focus {
+            outline: 2px solid var(--accent);
+            border-color: transparent;
+        }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin: 1rem 0 1.5rem;
+        }
+        .control-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.95rem;
+        }
+        button {
+            border: none;
+            border-radius: 10px;
+            padding: 0.75rem 1.4rem;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.1s ease;
+        }
+        button.primary {
+            background: var(--accent);
+            color: #fff;
+            box-shadow: 0 12px 25px rgba(45, 127, 249, 0.25);
+        }
+        button.secondary {
+            background: #e8ecf5;
+            color: #1f2c45;
+        }
+        button:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+        button:not(:disabled):hover {
+            transform: translateY(-1px);
+        }
+        .button-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+            margin-top: 1.2rem;
+        }
+        .stats {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-top: 1rem;
+            font-size: 0.95rem;
+            color: #333;
+        }
+        .stats span strong {
+            font-size: 1.25rem;
+            margin-left: 0.3rem;
+        }
+        .hint {
+            font-size: 0.9rem;
+            color: #666;
+            margin-top: 0.8rem;
+        }
+        footer {
+            text-align: center;
+            font-size: 0.85rem;
+            color: #667084;
+            margin-top: 3rem;
+        }
+        @media (max-width: 600px) {
+            .controls {
+                flex-direction: column;
+            }
+            textarea {
+                min-height: 160px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <header>
+            <h1>文本去重工具</h1>
+            <p class="lead">将需要去重的内容粘贴到输入框，选择处理规则后点击“开始去重”。本工具会保留首个出现的内容顺序，仅移除重复项。</p>
+        </header>
+
+        <section class="card">
+            <label for="inputText">输入内容</label>
+            <textarea id="inputText" placeholder="每一行代表一个条目，支持自由文本。"></textarea>
+
+            <div class="controls">
+                <label class="control-item">
+                    <input type="checkbox" id="trimWhitespace" checked>
+                    忽略前后空格
+                </label>
+                <label class="control-item">
+                    <input type="checkbox" id="ignoreCase">
+                    忽略大小写
+                </label>
+                <label class="control-item">
+                    <input type="checkbox" id="skipEmpty" checked>
+                    自动去除空行
+                </label>
+            </div>
+
+            <div class="button-row">
+                <button class="primary" id="dedupBtn">开始去重</button>
+                <button class="secondary" id="clearBtn">清空输入</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <label for="outputText">去重结果</label>
+            <textarea id="outputText" placeholder="去重结果会显示在这里。" readonly></textarea>
+            <div class="button-row">
+                <button class="secondary" id="copyBtn" disabled>复制结果</button>
+            </div>
+            <div class="stats" id="stats" aria-live="polite">
+                <span>原始条目：<strong id="originalCount">0</strong></span>
+                <span>去重后：<strong id="uniqueCount">0</strong></span>
+                <span>去掉重复：<strong id="removedCount">0</strong></span>
+            </div>
+            <p class="hint">提示：操作完全在浏览器本地完成，可直接部署在任何 Linux Web 服务器（Nginx/Apache/静态服务）上。</p>
+        </section>
+        <footer>Made with ❤️ for文本处理</footer>
+    </div>
+
+    <script>
+        const input = document.getElementById('inputText');
+        const output = document.getElementById('outputText');
+        const stats = {
+            original: document.getElementById('originalCount'),
+            unique: document.getElementById('uniqueCount'),
+            removed: document.getElementById('removedCount'),
+        };
+        const options = {
+            trimWhitespace: document.getElementById('trimWhitespace'),
+            ignoreCase: document.getElementById('ignoreCase'),
+            skipEmpty: document.getElementById('skipEmpty'),
+        };
+        const buttons = {
+            dedup: document.getElementById('dedupBtn'),
+            clear: document.getElementById('clearBtn'),
+            copy: document.getElementById('copyBtn'),
+        };
+
+        function updateStats(original, unique) {
+            stats.original.textContent = original;
+            stats.unique.textContent = unique;
+            stats.removed.textContent = Math.max(original - unique, 0);
+            buttons.copy.disabled = unique === 0;
+        }
+
+        function deduplicate() {
+            const raw = input.value;
+            if (!raw.trim()) {
+                output.value = '';
+                updateStats(0, 0);
+                return;
+            }
+
+            const lines = raw.replace(/\r\n/g, '\n').split('\n');
+            const unique = [];
+            const seen = new Set();
+
+            for (const line of lines) {
+                let processed = options.trimWhitespace.checked ? line.trim() : line;
+                if (options.skipEmpty.checked && processed === '') {
+                    continue;
+                }
+
+                let key = processed;
+                if (options.ignoreCase.checked) {
+                    key = key.toLowerCase();
+                }
+
+                if (seen.has(key)) {
+                    continue;
+                }
+
+                seen.add(key);
+                unique.push(processed);
+            }
+
+            output.value = unique.join('\n');
+            updateStats(lines.length, unique.length);
+        }
+
+        function clearInput() {
+            input.value = '';
+            output.value = '';
+            updateStats(0, 0);
+            input.focus();
+        }
+
+        async function copyResult() {
+            if (!output.value) return;
+            try {
+                await navigator.clipboard.writeText(output.value);
+                buttons.copy.textContent = '已复制';
+                setTimeout(() => (buttons.copy.textContent = '复制结果'), 1500);
+            } catch (err) {
+                alert('复制失败，请手动复制。');
+            }
+        }
+
+        buttons.dedup.addEventListener('click', deduplicate);
+        buttons.clear.addEventListener('click', clearInput);
+        buttons.copy.addEventListener('click', copyResult);
+        input.addEventListener('keydown', (event) => {
+            if (event.ctrlKey && event.key.toLowerCase() === 'enter') {
+                event.preventDefault();
+                deduplicate();
+            }
+        });
+
+        updateStats(0, 0);
+    </script>
+</body>
+</html>
